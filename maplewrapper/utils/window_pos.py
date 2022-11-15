@@ -12,8 +12,7 @@ def process_coords(c_name):
     Returns tuple (x0, y0, x1, y0) of process position on screen
     """
     hdl = win32gui.FindWindow(c_name, None)
-    rect = win32gui.GetWindowRect(hdl)
-    return rect
+    return win32gui.GetWindowRect(hdl)
 
 class_names = []
 def callback(hwnd, extra):

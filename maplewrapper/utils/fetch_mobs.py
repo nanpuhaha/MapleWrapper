@@ -20,11 +20,11 @@ def download_sprites(mob_name):
     Returns : list of downloaded file names
     """
     pth = pathlib.Path(__file__).resolve().parents[1]
-    
+
     output_dir = join(pth, "templates","mobs", mob_name)
     if not os.path.exists(output_dir) or len(os.listdir(output_dir)) == 0:
         with open(join(pth, "utils", "mobs.txt"), "r") as f:
-            l = f.readlines() 
+            l = f.readlines()
             identifiers = [((" ".join(item.split(" ")[2:])).strip(), item.split(" ")[0]) for item in l if "?" not in (" ".join(item.split(" ")[2:]))]
             identifiers = dict(identifiers)
 
@@ -58,10 +58,8 @@ def download_sprites(mob_name):
                         stance_templates = sorted([f for f in files_in_zip if stance in f])[index:index+1]
                     else:
                         stance_templates = sorted([f for f in files_in_zip if stance in f])[:index]
-                    
-                    for candidates in stance_templates:
-                        chosen_templates.append(candidates)
 
+                    chosen_templates.extend(iter(stance_templates))
                 for f in chosen_templates:
                     zip.extract(f, join(pth,"templates","mobs",f"{mob_name}"))
 

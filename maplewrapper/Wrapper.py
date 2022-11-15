@@ -99,8 +99,7 @@ class wrapper():
                     if h >= 40:
                         mob_im = mob_im[:-33,:]
 
-                    mobs_t.append(mob_im)
-                    mobs_t.append(cv2.flip(mob_im, 1))
+                    mobs_t.extend((mob_im, cv2.flip(mob_im, 1)))
         return mobs_t
 
     def blend_mobs(self, mob_t, content, k=1):
@@ -114,8 +113,7 @@ class wrapper():
 
     def get_player(self):
         nametag_box = self.single_template_matching(self.content, self.name_t)
-        player = self.postprocess_player(nametag_box)
-        return player
+        return self.postprocess_player(nametag_box)
 
     def postprocess_player(self, nametag_box):
         nametag_box[0] += (self.name_t_widthm - 25)
@@ -133,19 +131,29 @@ class wrapper():
         ents = np.array([], dtype=np.int32)
 
         with concurrent.futures.ThreadPoolExecutor() as executor: 
-            granular_entities = [executor.submit(self.multi_template_matching, self.content, template, threshold=0.65, method=cv2.TM_CCOEFF_NORMED, nms=False) for i, template in enumerate(self.mobs_t)]
+            granular_entities = [
+                executor.submit(
+                    self.multi_template_matching,
+                    self.content,
+                    template,
+                    threshold=0.65,
+                    method=cv2.TM_CCOEFF_NORMED,
+                    nms=False,
+                )
+                for template in self.mobs_t
+            ]
+
             for ent in granular_entities:
                 ents = np.append(ents, ent.result())
-            
+
             size = ents.shape[0]
             chunks = size // 4
-            
+
             if chunks != 0:
                 ents = ents.reshape(chunks,-1)
-                
+
             entity_list = ents[:10]
-            entity_list = non_max_suppression_fast(entity_list, 0.75)
-            return entity_list
+            return non_max_suppression_fast(entity_list, 0.75)
     
     def get_stats(self, investigate=False):
         """
@@ -159,25 +167,24 @@ class wrapper():
             'MP' : [354, 9, None, 18],
             'EXP' : [467, 9, None, 18]
         }   
-        
+
         x1_hp_mp = self.get_pos_x0(self.ui, self.slash_t, 0.75)
         x1_exp = self.get_pos_x0(self.ui, self.bracket_t, 0.9)
-        
+
         buffer = 2
-        
+
         coords['HP'][2] = x1_hp_mp[0] + buffer
         coords['MP'][2] = x1_hp_mp[1] + buffer
         coords['EXP'][2] = x1_exp[2] + buffer
-        
+
         stats = []
 
-        if investigate:
-            for k,v in coords.items():
+        for k,v in coords.items():
+            if investigate:
                 crop = [v[0], v[1], v[2], v[3]]
                 stats.append(crop)
-            
-        else:
-            for k,v in coords.items():
+
+            else:
                 crop = self.ui[v[1]:v[3], v[0]:v[2]]
                 if k == 'LVL':
                     stat = self.get_numbers(crop, self.lvl_numbers_t)
@@ -192,17 +199,13 @@ class wrapper():
         Returns INT of numbers present in crop  
         """
         numbers_list = []
-        for i, template in enumerate(templates):                        
+        for i, template in enumerate(templates):                    
             matches = self.multi_template_matching(crop, template, 0.99, cv2.TM_CCOEFF_NORMED, nms=False)
 
-            if type(matches) != list:                
-                for match in matches:
-                    numbers_list.append([int(match[0]),str(i)])
-        
-        numbers_list = sorted(numbers_list, key = lambda x: int(x[0]))  
-        stat = ""
-        for num in numbers_list:
-            stat += num[1]
+            if type(matches) != list:        
+                numbers_list.extend([int(match[0]),str(i)] for match in matches)
+        numbers_list = sorted(numbers_list, key = lambda x: int(x[0]))
+        stat = "".join(num[1] for num in numbers_list)
         return int(stat)
         
     def get_pos_x0(self, ui, template, thresh, coord=0):
@@ -279,24 +282,24 @@ class wrapper():
             'HP' : [None, 9, None, 18],
             'MP' : [None, 9, None, 18],
         }   
-        
+
         x0_hp_mp = self.get_pos_x0(self.ui, self.slash_t, 0.75, 2)
         x1_hp_mp = self.get_pos_x0(self.ui, self.bracket_c_t, 0.9)
-        
+
         buffer = 2
-        
+
         coords['HP'][0] = x0_hp_mp[0] - buffer
         coords['MP'][0] = x0_hp_mp[1] - buffer
         coords['HP'][2] = x1_hp_mp[0] + buffer
         coords['MP'][2] = x1_hp_mp[1] + buffer
-        
+
         base_stats = []
 
         if investigate:
-            for k,v in coords.items():
+            for v in coords.values():
                 bounding_box = [v[0], v[1], v[2], v[3]]
                 base_stats.append(bounding_box)
-            
+
         else:
             for k,v in coords.items():
                 crop = self.ui[v[1]:v[3], v[0]:v[2]]
@@ -318,15 +321,23 @@ class wrapper():
         ents = np.array([], dtype=np.int32)
 
         with concurrent.futures.ThreadPoolExecutor() as executor: 
-            granular_entities = [executor.submit(self.multi_template_matching, self.content, template, threshold=0.85, method=cv2.TM_CCOEFF_NORMED, nms=False) for i, template in enumerate(self.hitreg_numbers_t)]
+            granular_entities = [
+                executor.submit(
+                    self.multi_template_matching,
+                    self.content,
+                    template,
+                    threshold=0.85,
+                    method=cv2.TM_CCOEFF_NORMED,
+                    nms=False,
+                )
+                for template in self.hitreg_numbers_t
+            ]
+
             for ent in granular_entities:
                 ents = np.append(ents, ent.result())
-            
-            size = ents.shape[0]
-            if size == 0:
-                return False
 
-            return True
+            size = ents.shape[0]
+            return size != 0
 
     def display(self, im_name, im):
         cv2.imshow(f"{im_name}", im)
@@ -339,10 +350,10 @@ class wrapper():
         views : [frame, content, ui, player, mobs, stats]
         """
         game_window = self.d.screenshot(region=self.p_coords)  
-        
+
         clr_frame, clr_content, clr_ui = self.get_aoi(game_window, cv2.COLOR_RGB2BGR)
         self.frame, self.content, self.ui = self.get_aoi(game_window, cv2.COLOR_BGR2GRAY)
-        
+
         items = {
             'frame' : [clr_frame, None],
             'content' : [clr_content, None],
@@ -357,19 +368,15 @@ class wrapper():
 
         image = items[view][0]
         clr = (0, 0, 255)
-        width = 2
-  
         if items[view][1] != None:
             boxes = items[view][1]() if ('stats' not in view) else items[view][1](True)
+            width = 2
+
             if view == 'player':
-                image = cv2.rectangle(image, (boxes[0],boxes[1]), (boxes[2],boxes[3]), clr, width) 
-            elif view == 'mobs':
-                for box in boxes:
-                    image = cv2.rectangle(image, (box[0],box[1]), (box[2],box[3]), clr , width)               
+                image = cv2.rectangle(image, (boxes[0],boxes[1]), (boxes[2],boxes[3]), clr, width)
             else:
                 for box in boxes:
                     image = cv2.rectangle(image, (box[0],box[1]), (box[2],box[3]), clr , width)
-
         self.d.stop()
 
         if type(items[view][0]) == list:
